@@ -153,6 +153,14 @@ class AddOp(Op):
     def infer_shape(self, node, input_shapes):
         """Need to handle input_vals[0].shape != input_vals[1].shape"""
         """TODO: Your code here"""
+        assert len(input_shapes) == 2
+        if input_shapes[0] == input_shapes[1]:
+            return input_shapes[0]
+        if input_shapes[0] == (1,):
+            return input_shapes[1]
+        if input_shapes[1] == (1,):
+            return input_shapes[0]
+        return None
 
 
 class AddByConstOp(Op):
@@ -176,6 +184,8 @@ class AddByConstOp(Op):
 
     def infer_shape(self, node, input_shapes):
         """TODO: Your code here"""
+        assert len(input_shapes) == 1
+        return input_shapes[0]
 
 
 class MulOp(Op):
@@ -209,6 +219,14 @@ class MulOp(Op):
     def infer_shape(self, node, input_shapes):
         """Need to handle input_vals[0].shape != input_vals[1].shape"""
         """TODO: Your code here"""
+        assert len(input_shapes) == 2
+        if input_shapes[0] == input_shapes[1]:
+            return input_shapes[0]
+        if input_shapes[0] == (1,):
+            return input_shapes[1]
+        if input_shapes[1] == (1,):
+            return input_shapes[0]
+        return None
 
 
 class MulByConstOp(Op):
@@ -232,6 +250,8 @@ class MulByConstOp(Op):
 
     def infer_shape(self, node, input_shapes):
         """TODO: Your code here"""
+        assert len(input_shapes) == 1
+        return input_shapes[0]
 
 
 class MatMulOp(Op):
@@ -300,6 +320,19 @@ class MatMulOp(Op):
 
     def infer_shape(self, node, input_shapes):
         """TODO: Your code here"""
+        assert len(input_shapes) == 2
+        if ((node.matmul_attr_trans_A is False) and
+                (node.matmul_attr_trans_B is False)):
+            return((input_shapes[0][0], input_shapes[1][1]))
+        elif ((node.matmul_attr_trans_A is True) and
+                (node.matmul_attr_trans_B is False)):
+            return((input_shapes[0][1], input_shapes[1][1]))
+        elif ((node.matmul_attr_trans_A is False) and
+                (node.matmul_attr_trans_B is True)):
+            return((input_shapes[0][0], input_shapes[1][0]))
+        elif ((node.matmul_attr_trans_A is True) and
+                (node.matmul_attr_trans_B is True)):
+            return((input_shapes[0][1], input_shapes[1][0]))
 
 
 class PlaceholderOp(Op):
@@ -339,6 +372,10 @@ class ZerosLikeOp(Op):
     def infer_shape(self, node, input_shapes):
         """If input_shape is a vector, simpler to return (1,)"""
         """TODO: Your code here"""
+        assert len(input_shapes) == 1
+        if len(input_shapes[0]) == 1:
+            return (1,)
+        return input_shapes[0]
 
 
 class OnesLikeOp(Op):
@@ -362,6 +399,10 @@ class OnesLikeOp(Op):
     def infer_shape(self, node, input_shapes):
         """If input_shape is a vector, simpler to return (1,)"""
         """TODO: Your code here"""
+        assert len(input_shapes) == 1
+        if len(input_shapes[0]) == 1:
+            return (1,)
+        return input_shapes[0]
 
 
 class ReduceSumAxisZeroOp(Op):
@@ -391,6 +432,10 @@ class ReduceSumAxisZeroOp(Op):
         for vector, simpler to do (3,)->(1,)
         """
         """TODO: Your code here"""
+        assert len(input_shapes) == 1
+        if len(input_shapes[0]) == 1:
+            return (1,)
+        return input_shapes[0][1:]
 
 
 class BroadcastToOp(Op):
@@ -417,6 +462,8 @@ class BroadcastToOp(Op):
 
     def infer_shape(self, node, input_shapes):
         """TODO: Your code here"""
+        assert len(input_shapes) == 2
+        return broadcast_rule(input_shapes[0], input_shapes[1])
 
 
 def softmax_func(y):
@@ -453,6 +500,8 @@ class SoftmaxCrossEntropyOp(Op):
 
     def infer_shape(self, node, input_shapes):
         """TODO: Your code here"""
+        assert len(input_shapes) == 2
+        return (1,)
 
 
 class SoftmaxOp(Op):
@@ -476,6 +525,8 @@ class SoftmaxOp(Op):
 
     def infer_shape(self, node, input_shapes):
         """TODO: Your code here"""
+        assert len(input_shapes) == 1
+        return input_shapes[0]
 
 
 class ReluOp(Op):
@@ -497,6 +548,8 @@ class ReluOp(Op):
 
     def infer_shape(self, node, input_shapes):
         """TODO: Your code here"""
+        assert len(input_shapes) == 1
+        return input_shapes[0]
 
 
 class ReluGradientOp(Op):
@@ -520,6 +573,8 @@ class ReluGradientOp(Op):
 
     def infer_shape(self, node, input_shapes):
         """TODO: Your code here"""
+        assert len(input_shapes) == 2
+        return input_shapes[0]
 
 
 # Create global singletons of operators.
@@ -558,6 +613,7 @@ class Executor(object):
         self.node_to_shape_map = None
         self.node_to_arr_map = None
         self.feed_shapes = None
+        self.memory_pool = None
 
     def infer_shape(self, feed_shapes):
         """Given shapes of feed_dict nodes, infer shape for all nodes in graph.
@@ -571,6 +627,16 @@ class Executor(object):
         feed_shapes: node->shapes mapping for feed_dict nodes.
         """
         """TODO: Your code here"""
+        self.node_to_shape_map = {}
+        for node in feed_shapes:
+            self.node_to_shape_map[node] = feed_shapes[node]
+        for node in self.topo_order:
+            if node in self.node_to_shape_map:
+                continue
+            input_shapes = []
+            for inputs in node.inputs:
+                input_shapes.append(self.node_to_shape_map[inputs])
+            self.node_to_shape_map[node] = node.op.infer_shape(node, input_shapes)
 
     def memory_plan(self, feed_shapes):
         """Allocates ndarray.NDArray for every node except feed_dict nodes.
@@ -590,6 +656,24 @@ class Executor(object):
         feed_shapes: node->shapes mapping for feed_dict nodes.
         """
         """TODO: Your code here"""
+        if self.memory_pool == None:
+            self.memory_pool = []
+        if self.node_to_arr_map:
+            for node, arr in self.node_to_arr_map:
+                self.memory_pool.append(arr)
+        self.node_to_arr_map = {}
+        for node, shape in self.node_to_shape_map.items():
+            arr_node = None
+            if node in feed_shapes:
+                continue
+            for arr in self.memory_pool:
+                if arr.shape == shape:
+                    arr_node = arr
+                    self.memory_pool.remove(arr)
+                    break
+            if arr_node == None:
+                arr_node = ndarray.empty(shape, ctx=self.ctx)
+            self.node_to_arr_map[node] = arr_node
 
     def run(self, feed_dict, convert_to_numpy_ret_vals=False):
         """
